@@ -15,14 +15,12 @@ Runs entirely in the browser — no server, no data leaves your computer.
 | P, POW | P |
 | WO | WO |
 | H | PH if the date is in the holiday list, otherwise L (leave) |
-| A | A (or L, your choice); PH if the date is a holiday (optional) |
+| A, L, LV | L (leave); A becomes PH if the date is a holiday (optional) |
 | - | blank (no record / not joined) |
-| Late (optional) | Lt, counted inside P — uses each employee's shift start + grace minutes |
 
-Totals (P, PH, WO, Lv, LT, A) are Excel COUNTIF formulas.
+Output columns: BioMatric Code, NAME, one column per day. Totals (P, PH, WO, Lv) are Excel COUNTIF formulas.
 
 ## Things to know
 - The timesheet has day numbers only (e.g. `23 (Sun)`); the app works out the month from the weekdays. Check the date in Step 2.
 - Holiday list is preloaded with Central Govt gazetted holidays (Delhi) for 2026–2027. Edit it in the app; edits are saved in your browser.
-- Emp Codes (IRCTIT…) are not in the timesheet. Type them once, or import last month's attendance sheet (needs columns "Emp Code", "BioMatric Code", "NAME"). Saved in your browser only — a different browser/PC starts empty.
 - Libraries loaded from cdnjs: SheetJS 0.18.5 (read), ExcelJS 4.4.0 (write). Needs internet.

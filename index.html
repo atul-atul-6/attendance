@@ -55,7 +55,7 @@ textarea{font-family:var(--f-mono);font-size:.8rem;min-height:250px;resize:verti
 .map td{padding:5px 6px;border-bottom:1px solid var(--line);vertical-align:middle}
 .map td:first-child{font-family:var(--f-mono);font-weight:600;width:56px}
 .chip{display:inline-block;font:600 .74rem var(--f-mono);padding:1px 6px;border-radius:4px;min-width:28px;text-align:center}
-.c-P{color:var(--p)} .c-WO{color:var(--wo)} .c-PH{background:var(--ph-bg);color:var(--ph)} .c-L{background:var(--l-bg);color:var(--l)} .c-A{background:var(--a-bg);color:var(--a)} .c-Lt{background:var(--lt-bg);color:var(--lt)}
+.c-P{color:var(--p)} .c-WO{color:var(--wo)} .c-PH{background:var(--ph-bg);color:var(--ph)} .c-L{background:var(--l-bg);color:var(--l)}
 .inperiod{margin-top:10px;font-size:.86rem;display:grid;gap:4px}
 .inperiod div{display:flex;gap:10px}
 .inperiod span:first-child{font-family:var(--f-mono);font-variant-numeric:tabular-nums;color:var(--accent);min-width:92px}
@@ -76,8 +76,6 @@ table.reg th.hol{background:var(--ph-bg);color:var(--ph)}
 table.reg .stick{position:sticky;left:0;background:var(--surface);z-index:1;text-align:left}
 table.reg thead .stick{z-index:3;background:var(--soft)}
 table.reg td.name{text-align:left;font-weight:600;max-width:180px;overflow:hidden;text-overflow:ellipsis}
-table.reg td.code input{font:.76rem var(--f-mono);width:104px;padding:3px 5px;background:var(--bg)}
-table.reg td.shift input{font:.76rem var(--f-mono);width:62px;padding:3px 5px;background:var(--bg)}
 table.reg td.bio{font-family:var(--f-mono);color:var(--muted)}
 table.reg td.d{font-family:var(--f-mono);font-weight:600;min-width:30px}
 table.reg td.tot{font-family:var(--f-mono);font-weight:600;color:var(--accent);min-width:30px}
@@ -126,13 +124,12 @@ details summary{cursor:pointer;font-weight:600;font-size:.9rem}
             <tr><td>POW</td><td>Present on week off → <span class="chip c-P">P</span></td></tr>
             <tr><td>WO</td><td>Week off → <span class="chip c-WO">WO</span></td></tr>
             <tr><td>H</td><td>Public holiday on that date → <span class="chip c-PH">PH</span>, otherwise leave → <span class="chip c-L">L</span></td></tr>
-            <tr><td>A</td><td><select id="absentAs" aria-label="How to mark A (absent)"><option value="A">Keep as absent (A)</option><option value="L">Count as leave (L)</option></select></td></tr>
+            <tr><td>A</td><td>Absent → leave <span class="chip c-L">L</span></td></tr>
+            <tr><td>L, LV</td><td>Leave → <span class="chip c-L">L</span></td></tr>
             <tr><td>-</td><td>No record (not joined yet) → blank</td></tr>
           </table>
         </div>
         <label class="check"><input type="checkbox" id="phAbsent" checked><span>Mark <b>A</b> as <b>PH</b> when the date is a public holiday (office closed, so nobody punched in)</span></label>
-        <label class="check"><input type="checkbox" id="lateOn"><span>Mark late arrivals as <b>Lt</b> (counted inside P, like your current sheet). Shift start is guessed for each employee from their punch-in times; check it in the table below.</span></label>
-        <div class="field" id="graceBox" hidden><label for="grace">Grace period (minutes after shift start)</label><input id="grace" type="number" min="0" max="120" value="10"></div>
       </div>
     </section>
 
@@ -158,16 +155,13 @@ details summary{cursor:pointer;font-weight:600;font-size:.9rem}
     <div class="toolbar">
       <div class="left">
         <button class="btn" id="dl" type="button">Download attendance (.xlsx)</button>
-        <label class="btn ghost" for="codesFile">Import Emp Codes from an old attendance sheet</label>
-        <input id="codesFile" type="file" accept=".xlsx,.xls" hidden>
       </div>
-      <div class="legend"><span class="chip c-P">P</span>Present <span class="chip c-PH">PH</span>Holiday <span class="chip c-WO">WO</span>Week off <span class="chip c-L">L</span>Leave <span class="chip c-A">A</span>Absent <span class="chip c-Lt">Lt</span>Late</div>
+      <div class="legend"><span class="chip c-P">P</span>Present <span class="chip c-PH">PH</span>Holiday <span class="chip c-WO">WO</span>Week off <span class="chip c-L">L</span>Leave</div>
     </div>
-    <p class="muted small" style="margin:0 0 10px">Emp Code is not in the timesheet. Type it once per person (or import it from last month's sheet) and it is remembered in this browser.</p>
     <div class="tablebox"><table class="reg" id="reg"></table></div>
   </section>
 
-  <footer>Mark codes in the Excel file: P present, PH public holiday, WO week off, L leave, A absent, Lt late. Totals are Excel formulas, so they update if you edit a mark.</footer>
+  <footer>Mark codes in the Excel file: P present, PH public holiday, WO week off, L leave (total in the Lv column). Totals are Excel formulas, so they update if you edit a mark.</footer>
 </div>
 <div class="toast" id="toast" hidden></div>
 
@@ -218,9 +212,7 @@ const DEFAULT_HOLIDAYS=`# Central Government gazetted holidays, Delhi (DoPT). Ed
 2027-11-14 | Guru Nanak's Birthday
 2027-12-25 | Christmas Day`;
 
-let state={fileName:null,example:true,days:[],employees:[],order:null};
-let codes=store.get('att.codes',{});      // bio or NAME:xxx -> emp code
-let shifts=store.get('att.shifts',{});    // bio -> HH:MM
+let state={fileName:null,example:true,days:[],employees:[]};
 
 /* ---------- helpers ---------- */
 const pad=n=>String(n).padStart(2,'0');
@@ -231,7 +223,6 @@ const toMin=t=>{const m=/^(\d{1,2}):(\d{2})/.exec(String(t||'').trim());return m
 const fromMin=m=>`${pad(Math.floor(m/60))}:${pad(m%60)}`;
 const norm=v=>String(v==null?'':v).trim();
 function toast(msg){const t=$('#toast');t.textContent=msg;t.hidden=false;clearTimeout(toast.h);toast.h=setTimeout(()=>t.hidden=true,4000)}
-function keyFor(e){return e.bio?e.bio:'NAME:'+e.name.toUpperCase()}
 
 function parseHolidays(text){
   const map=new Map();
@@ -292,16 +283,10 @@ function inferStart(days){
   return best?best.base:null;
 }
 
-function guessShift(e){
-  const t=[];e.status.forEach((s,i)=>{if(/^P/i.test(s)){const m=toMin(e.inn[i]);if(m!=null)t.push(m)}});
-  if(!t.length)return '';
-  t.sort((a,b)=>a-b);const p=t[Math.floor((t.length-1)*0.2)];
-  return fromMin(Math.round(p/30)*30);
-}
 
 /* ---------- conversion ---------- */
-function opts(){return {absentAs:$('#absentAs').value,phAbsent:$('#phAbsent').checked,lateOn:$('#lateOn').checked,grace:Math.max(0,+$('#grace').value||0)}}
-function convert(raw,inn,isPH,shift,o){
+function opts(){return {phAbsent:$('#phAbsent').checked}}
+function convert(raw,isPH,o){
   const s=norm(raw).toUpperCase();
   if(!s||s==='-')return '';
   let out;
@@ -310,11 +295,10 @@ function convert(raw,inn,isPH,shift,o){
     case 'WO':case 'W/O':out='WO';break;
     case 'H':out=isPH?'PH':'L';break;
     case 'PH':out='PH';break;
-    case 'L':case 'LV':case 'CL':case 'EL':case 'SL':out='L';break;
-    case 'A':case 'AB':out=(isPH&&o.phAbsent)?'PH':o.absentAs;break;
+    case 'L':case 'LV':case 'LEAVE':case 'CL':case 'EL':case 'SL':out='L';break;
+    case 'A':case 'AB':out=(isPH&&o.phAbsent)?'PH':'L';break;
     default:out=s;
   }
-  if(out==='P'&&s==='P'&&o.lateOn&&shift){const a=toMin(inn),b=toMin(shift);if(a!=null&&b!=null&&a>b+o.grace)out='Lt'}
   return out;
 }
 
@@ -323,10 +307,9 @@ function compute(){
   const dates=start?state.days.map((_,i)=>addDays(start,i)):[];
   const isHol=dates.map(d=>hol.has(iso(d)));
   const rows=state.employees.map(e=>{
-    const shift=shifts[e.bio||e.name]??e.guess;
-    const marks=state.days.map((_,i)=>convert(e.status[i],e.inn[i],isHol[i],shift,o));
+    const marks=state.days.map((_,i)=>convert(e.status[i],isHol[i],o));
     const c=k=>marks.filter(m=>m===k).length;
-    return {e,shift,marks,tot:{P:c('P')+c('Lt'),PH:c('PH'),WO:c('WO'),Lv:c('L'),LT:c('Lt'),A:c('A')}};
+    return {e,marks,tot:{P:c('P'),PH:c('PH'),WO:c('WO'),Lv:c('L')}};
   });
   return {o,start,hol,dates,isHol,rows};
 }
@@ -341,7 +324,6 @@ function periodLabel(dates){
 function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
 function render(){
   const R=compute();
-  $('#graceBox').hidden=!R.o.lateOn;
   // holidays in period
   const ip=$('#inPeriod');
   if(R.dates.length){
@@ -360,31 +342,26 @@ function renderWarnings(R){
     let total=0,abs=0,h=0;
     R.rows.forEach(r=>{const s=norm(r.e.status[i]).toUpperCase();if(s&&s!=='-'){total++;if(s==='A')abs++;if(s==='H')h++}});
     const label=`${WD[d.getDay()]} ${d.getDate()} ${MON[d.getMonth()]}`;
-    if(total>=3&&abs/total>=0.8)w.push({t:`<b>${label}</b>: ${abs} of ${total} employees are marked absent. If the office was closed or the biometric machine was down, add this date as a holiday.`,date:iso(d)});
+    if(total>=3&&abs/total>=0.8)w.push({t:`<b>${label}</b>: ${abs} of ${total} employees have status A, so they would all get leave (L). If the office was closed or the biometric machine was down, add this date as a holiday.`,date:iso(d)});
     else if(h>0)w.push({t:`<b>${label}</b>: ${h} employee(s) have status H but this date is not in the holiday list, so they are marked as leave (L). Add the date if it was a holiday.`,date:iso(d)});
   });
-  const unknown=new Set();R.rows.forEach(r=>r.marks.forEach(m=>{if(m&&!['P','PH','WO','L','A','Lt'].includes(m))unknown.add(m)}));
+  const unknown=new Set();R.rows.forEach(r=>r.marks.forEach(m=>{if(m&&!['P','PH','WO','L'].includes(m))unknown.add(m)}));
   if(unknown.size)w.push({t:`Unrecognised status codes copied as they are: <b>${[...unknown].map(esc).join(', ')}</b>. They are not counted in any total.`});
-  const missing=R.rows.filter(r=>!codes[keyFor(r.e)]).length;
-  if(missing)w.push({t:`${missing} employee(s) have no Emp Code yet. Fill them in the table, or import last month's attendance sheet.`});
   const box=$('#warns');
   box.innerHTML=w.length?w.map((x,i)=>`<div class="warn"><span>${x.t}</span>${x.date?`<button class="btn ghost" type="button" data-add="${x.date}">Add as holiday</button>`:''}</div>`).join(''):'<div class="ok">No problems found.</div>';
 }
 
 function renderTable(R){
-  const showShift=R.o.lateOn;
-  const tk=['P','PH','WO','Lv','LT'].concat(R.o.absentAs==='A'?['A']:[]);
-  let h='<thead><tr><th class="stick">NAME</th><th>Emp Code</th><th>BioMatric</th>'+(showShift?'<th>Shift</th>':'');
+  const tk=['P','PH','WO','Lv'];
+  let h='<thead><tr><th class="stick">NAME</th><th>BioMatric</th>';
   R.dates.forEach((d,i)=>h+=`<th class="${R.isHol[i]?'hol':''}" title="${R.isHol[i]?esc(R.hol.get(iso(d))):''}">${d.getDate()}</th>`);
   if(!R.dates.length)state.days.forEach(x=>h+=`<th>${x.d}</th>`);
   tk.forEach(k=>h+=`<th class="tot" rowspan="2">${k}</th>`);
-  h+='</tr><tr><th class="stick"></th><th></th><th></th>'+(showShift?'<th></th>':'');
+  h+='</tr><tr><th class="stick"></th><th></th>';
   (R.dates.length?R.dates.map(d=>WD[d.getDay()]):state.days.map(x=>WD[x.w]||'')).forEach((w,i)=>h+=`<th class="${R.isHol[i]?'hol':''}">${w}</th>`);
   h+='</tr></thead><tbody>';
   R.rows.forEach((r,ri)=>{
-    const k=keyFor(r.e);
-    h+=`<tr><td class="stick name" title="${esc(r.e.name)}">${esc(r.e.name.toUpperCase())}</td><td class="code"><input type="text" id="code-${ri}" data-key="${esc(k)}" value="${esc(codes[k]||'')}" placeholder="Emp Code" aria-label="Emp Code for ${esc(r.e.name)}"></td><td class="bio">${esc(r.e.bio)}</td>`;
-    if(showShift)h+=`<td class="shift"><input type="text" id="shift-${ri}" data-bio="${esc(r.e.bio||r.e.name)}" value="${esc(r.shift||'')}" placeholder="09:00" aria-label="Shift start for ${esc(r.e.name)}"></td>`;
+    h+=`<tr><td class="stick name" title="${esc(r.e.name)}">${esc(r.e.name.toUpperCase())}</td><td class="bio">${esc(r.e.bio)}</td>`;
     r.marks.forEach(m=>h+=`<td class="d ${m?'c-'+m:''}">${m}</td>`);
     tk.forEach(t=>h+=`<td class="tot">${r.tot[t]}</td>`);
     h+='</tr>';
@@ -400,26 +377,25 @@ async function buildWorkbook(R){
   const wb=new ExcelJS.Workbook();wb.creator='Attendance Sheet Builder';
   const period=periodLabel(R.dates);
   const groups=new Map();R.rows.forEach(r=>{const g=r.e.dept||'Staff';if(!groups.has(g))groups.set(g,[]);groups.get(g).push(r)});
-  const tk=[['P',['P','Lt']],['PH',['PH']],['WO',['WO']],['Lv',['L']],['LT',['Lt']]];
-  if(R.o.absentAs==='A')tk.push(['A',['A']]);
+  const tk=[['P',['P']],['PH',['PH']],['WO',['WO']],['Lv',['L']]];
   const thin={style:'thin',color:{argb:'FF000000'}},border={top:thin,left:thin,bottom:thin,right:thin};
   const F=(o)=>Object.assign({name:'Cambria',size:10},o);
   const blue='FF1F3FBF';
   const used=new Set();
   for(const [dept,rows] of groups){
     let sn=dept.replace(/[\\\/\?\*\[\]:]/g,' ').slice(0,31)||'Attendance';let n=2;while(used.has(sn))sn=sn.slice(0,28)+' '+(n++);used.add(sn);
-    const ws=wb.addWorksheet(sn,{views:[{state:'frozen',xSplit:3,ySplit:3}],pageSetup:{orientation:'landscape',paperSize:9,fitToPage:true,fitToWidth:1,fitToHeight:0}});
-    const D=R.dates.length,first=4,lastDay=3+D,lastCol=lastDay+tk.length;
-    ws.getColumn(1).width=14;ws.getColumn(2).width=12;ws.getColumn(3).width=24;
+    const ws=wb.addWorksheet(sn,{views:[{state:'frozen',xSplit:2,ySplit:3}],pageSetup:{orientation:'landscape',paperSize:9,fitToPage:true,fitToWidth:1,fitToHeight:0}});
+    const D=R.dates.length,first=3,lastDay=2+D,lastCol=lastDay+tk.length;
+    ws.getColumn(1).width=14;ws.getColumn(2).width=24;
     for(let c=first;c<=lastDay;c++)ws.getColumn(c).width=4.6;
     for(let c=lastDay+1;c<=lastCol;c++)ws.getColumn(c).width=5;
     // row 1
-    ws.mergeCells(1,1,1,3);ws.mergeCells(1,4,1,lastCol);
+    ws.mergeCells(1,1,1,2);ws.mergeCells(1,first,1,lastCol);
     const c1=ws.getCell(1,1);c1.value=$('#deptTpl').value.replace('{DEPT}',dept.toUpperCase());
-    const c2=ws.getCell(1,4);c2.value=$('#titleTpl').value.replace('{PERIOD}',period);
+    const c2=ws.getCell(1,first);c2.value=$('#titleTpl').value.replace('{PERIOD}',period);
     [c1,c2].forEach(c=>{c.font=F({bold:true,size:11});c.alignment={horizontal:'center',vertical:'middle'}});
     // rows 2-3
-    [['Emp Code',1],['BioMatric Code',2],['NAME',3]].forEach(([t,c])=>{ws.mergeCells(2,c,3,c);const x=ws.getCell(2,c);x.value=t;x.font=F({bold:true});x.alignment={horizontal:'center',vertical:'middle',wrapText:true}});
+    [['BioMatric Code',1],['NAME',2]].forEach(([t,c])=>{ws.mergeCells(2,c,3,c);const x=ws.getCell(2,c);x.value=t;x.font=F({bold:true});x.alignment={horizontal:'center',vertical:'middle',wrapText:true}});
     R.dates.forEach((d,i)=>{
       const a=ws.getCell(2,first+i),b=ws.getCell(3,first+i);
       a.value=d.getDate();b.value=WD[d.getDay()];
@@ -430,8 +406,8 @@ async function buildWorkbook(R){
     // data
     rows.forEach((r,ri)=>{
       const rn=4+ri,row=ws.getRow(rn);
-      row.getCell(1).value=codes[keyFor(r.e)]||'';row.getCell(2).value=r.e.bio||'';row.getCell(3).value=r.e.name.toUpperCase();
-      r.marks.forEach((m,i)=>{const x=row.getCell(first+i);x.value=m||null;if(m==='A')x.font=F({color:{argb:'FFC00000'}});if(R.isHol[i])x.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFFFF2CC'}}});
+      row.getCell(1).value=r.e.bio||'';row.getCell(2).value=r.e.name.toUpperCase();
+      r.marks.forEach((m,i)=>{const x=row.getCell(first+i);x.value=m||null;if(R.isHol[i])x.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFFFF2CC'}}});
       const rng=`${colLetter(first)}${rn}:${colLetter(lastDay)}${rn}`;
       tk.forEach(([t,ks],j)=>{
         const f=ks.map(k=>`COUNTIF(${rng},"${k}")`).join('+');
@@ -442,7 +418,7 @@ async function buildWorkbook(R){
     const lastRow=3+rows.length;
     for(let rr=1;rr<=lastRow;rr++)for(let c=1;c<=lastCol;c++){
       const x=ws.getCell(rr,c);x.border=border;
-      if(rr>=4){if(!x.font||!x.font.name)x.font=F({});x.alignment={horizontal:c===3?'left':'center',vertical:'middle'}}
+      if(rr>=4){if(!x.font||!x.font.name)x.font=F({});x.alignment={horizontal:c===2?'left':'center',vertical:'middle'}}
     }
   }
   // holidays + notes
@@ -452,7 +428,7 @@ async function buildWorkbook(R){
   hs.getRow(1).font={bold:true};
   const ns=wb.addWorksheet('Legend');
   ns.columns=[{header:'Code',key:'c',width:8},{header:'Meaning',key:'m',width:70}];
-  [['P','Present (late days are counted inside P)'],['PH','Public holiday'],['WO','Week off'],['L','Leave (Lv column)'],['Lt','Late arrival (LT column)'],['A','Absent'],['(blank)','No record in timesheet (e.g. not joined yet)']].forEach(([c,m])=>ns.addRow({c,m}));
+  [['P','Present'],['PH','Public holiday'],['WO','Week off'],['L','Leave, including absent days (Lv column)'],['(blank)','No record in timesheet (e.g. not joined yet)']].forEach(([c,m])=>ns.addRow({c,m}));
   ns.addRow({});ns.addRow({c:'Source',m:state.fileName||'Example data'});
   ns.getRow(1).font={bold:true};
   return wb.xlsx.writeBuffer();
@@ -486,16 +462,9 @@ async function readRows(file){
   let all=[];wb.SheetNames.forEach(n=>{all=all.concat(XLSX.utils.sheet_to_json(wb.Sheets[n],{header:1,defval:'',raw:false,blankrows:false}))});
   return all;
 }
-function applyOrder(){
-  if(!state.order)return;
-  const idx=e=>{let i=state.order.indexOf(keyFor(e));return i<0?1e6:i};
-  state.employees.sort((a,b)=>idx(a)-idx(b));
-}
 function loadParsed(p,name){
   if(!p.employees.length){toast('No employees found. The file needs day headers like "23 (Sun)" and a "Final Status" row for each person.');return}
-  state={fileName:name,example:!name,days:p.days,employees:p.employees,order:store.get('att.order',null)};
-  state.employees.forEach(e=>e.guess=guessShift(e));
-  applyOrder();
+  state={fileName:name,example:!name,days:p.days,employees:p.employees};
   const s=inferStart(p.days);
   $('#start').value=s?iso(s):'';
   $('#startHint').textContent=s?`Worked out from the weekdays: ${p.days.length} days, ${iso(s)} to ${iso(addDays(s,p.days.length-1))}`:'Could not work out the month. Pick the date.';
@@ -507,26 +476,6 @@ async function handleFile(file){
   if(!file)return;
   try{loadParsed(parseRows(await readRows(file)),file.name)}
   catch(e){console.error(e);toast('Could not read that file: '+e.message)}
-}
-async function importCodes(file){
-  try{
-    const rows=await readRows(file);let hdr=null,ci={},added=0;const order=[];
-    for(const r of rows){
-      const cells=Array.from(r||[],norm);
-      if(!hdr){const e=cells.findIndex(c=>/^emp\.?\s*code$/i.test(c));if(e>=0){hdr=true;ci={emp:e,bio:cells.findIndex(c=>/bio/i.test(c)),name:cells.findIndex(c=>/^name$/i.test(c))}}continue}
-      const emp=cells[ci.emp];if(!emp||/^emp/i.test(emp))continue;
-      const bio=ci.bio>=0?cells[ci.bio]:'',nm=ci.name>=0?cells[ci.name]:'';
-      if(bio){codes[bio]=emp;order.push(bio)}
-      if(nm){codes['NAME:'+nm.toUpperCase()]=emp;order.push('NAME:'+nm.toUpperCase())}
-      added++;
-    }
-    if(!hdr){toast('No "Emp Code" column found in that file.');return}
-    // fill by name for employees whose bio code differs
-    state.employees.forEach(e=>{const k=keyFor(e);if(!codes[k]&&codes['NAME:'+e.name.toUpperCase()])codes[k]=codes['NAME:'+e.name.toUpperCase()]});
-    store.set('att.codes',codes);
-    state.order=order;store.set('att.order',order);applyOrder();
-    render();toast(`Imported ${added} Emp Codes. Rows now follow that sheet's order.`);
-  }catch(e){console.error(e);toast('Could not read that file: '+e.message)}
 }
 
 /* ---------- example data ---------- */
@@ -557,21 +506,15 @@ function exampleRows(){
 /* ---------- wiring ---------- */
 $('#hol').value=store.get('att.holidays',DEFAULT_HOLIDAYS);
 const saved=store.get('att.opts',{});
-['deptTpl','titleTpl','absentAs','grace'].forEach(id=>{if(saved[id]!=null)$('#'+id).value=saved[id]});
-['phAbsent','lateOn'].forEach(id=>{if(saved[id]!=null)$('#'+id).checked=saved[id]});
-function saveOpts(){store.set('att.opts',{deptTpl:$('#deptTpl').value,titleTpl:$('#titleTpl').value,absentAs:$('#absentAs').value,grace:$('#grace').value,phAbsent:$('#phAbsent').checked,lateOn:$('#lateOn').checked})}
-['start','absentAs','phAbsent','lateOn','grace'].forEach(id=>$('#'+id).addEventListener('change',()=>{saveOpts();render()}));
+['deptTpl','titleTpl'].forEach(id=>{if(saved[id]!=null)$('#'+id).value=saved[id]});
+['phAbsent'].forEach(id=>{if(saved[id]!=null)$('#'+id).checked=saved[id]});
+function saveOpts(){store.set('att.opts',{deptTpl:$('#deptTpl').value,titleTpl:$('#titleTpl').value,phAbsent:$('#phAbsent').checked})}
+['start','phAbsent'].forEach(id=>$('#'+id).addEventListener('change',()=>{saveOpts();render()}));
 ['deptTpl','titleTpl'].forEach(id=>$('#'+id).addEventListener('input',saveOpts));
 let ht;$('#hol').addEventListener('input',()=>{clearTimeout(ht);ht=setTimeout(()=>{store.set('att.holidays',$('#hol').value);render()},300)});
 $('#resetHol').addEventListener('click',()=>{$('#hol').value=DEFAULT_HOLIDAYS;store.set('att.holidays',DEFAULT_HOLIDAYS);render();toast('Holiday list reset')});
 $('#warns').addEventListener('click',e=>{const d=e.target.closest('[data-add]');if(!d)return;$('#hol').value=$('#hol').value.replace(/\s*$/,'')+`\n${d.dataset.add} | Office closed`;store.set('att.holidays',$('#hol').value);render();toast('Added '+d.dataset.add+' to the holiday list')});
-$('#reg').addEventListener('change',e=>{
-  const t=e.target;
-  if(t.dataset.key!=null){const v=t.value.trim();if(v)codes[t.dataset.key]=v;else delete codes[t.dataset.key];store.set('att.codes',codes);renderWarnings(compute())}
-  if(t.dataset.bio!=null){const v=t.value.trim();if(/^\d{1,2}:\d{2}$/.test(v))shifts[t.dataset.bio]=v;else delete shifts[t.dataset.bio];store.set('att.shifts',shifts);render()}
-});
 $('#file').addEventListener('change',e=>handleFile(e.target.files[0]));
-$('#codesFile').addEventListener('change',e=>{if(e.target.files[0])importCodes(e.target.files[0]);e.target.value=''});
 $('#dl').addEventListener('click',download);
 const drop=$('#drop');
 ['dragenter','dragover'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add('over')}));
